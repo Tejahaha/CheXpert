@@ -1,0 +1,54 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest
+.pytest_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Datasets and Large Files
+/dataset/
+/training/yolo_dataset/
+*.zip
+*.tar.gz
+*.csv
+# Ignore base pretrained weights
+yolo11*.pt
+yolov8*.pt
+*.pth
+
+# Training artifacts & Logs
+/training/runs/
+/training/chest_xray_yolo11_*/
+/training/wandb/
+runs/
+logs/
+*.log
+
+# Allow the specific trained model used for backend inference
+!/training/models/best.pt
+!/training/models/best_metrics.json
+
+# IDE / OS Files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
