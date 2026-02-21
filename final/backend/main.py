@@ -4,6 +4,8 @@ from ultralytics import YOLO
 from PIL import Image
 import io, time, os
 from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from Chat import router as chat_router
 
 app = FastAPI(title="Chest X-Ray Abnormality Detector", version="2.0")
 
@@ -15,6 +17,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+os.makedirs("output", exist_ok=True)
+app.mount("/output", StaticFiles(directory="output"), name="output")
+app.include_router(chat_router)
 
 # ---------------- CONFIG ----------------
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -174,6 +180,7 @@ async def batch_predict(files: list[UploadFile] = File(...)):
             "num_detections": len(detections),
             "detections": detections,
             "inference_time_seconds": inference_time,
+            "image_size": {"width": image.width, "height": image.height},
         })
 
     total_time = round(time.time() - total_start, 3)
