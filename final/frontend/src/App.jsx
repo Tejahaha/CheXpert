@@ -90,6 +90,34 @@ function BBoxOverlay({ detections, imgWidth, imgHeight }) {
   );
 }
 
+function DetectionCard({ det, index }) {
+  const color = getColor(det.class_name);
+  const confidencePercent = (det.confidence * 100).toFixed(1);
+
+  return (
+    <div className="detection-item" style={{ borderLeftColor: color }}>
+      <div className="det-header">
+        <span className="det-index" style={{ backgroundColor: color }}>
+          {index + 1}
+        </span>
+        <span className="det-name">{det.class_name}</span>
+        <span className="det-conf" style={{ color: color }}>
+          {confidencePercent}%
+        </span>
+      </div>
+      <div className="det-bar-track">
+        <div
+          className="det-bar-fill"
+          style={{
+            width: `${confidencePercent}%`,
+            backgroundColor: color,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function Navbar() {
   const { pathname } = useLocation();
   return (
@@ -117,22 +145,25 @@ function Navbar() {
 }
 
 function Home() {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [showBoxes, setShowBoxes] = useState(true);
   const inputRef = useRef(null);
 
-  const handleFile = useCallback((selected) => {
-    if (!selected) return;
-    setFile(selected);
-    setPreview(URL.createObjectURL(selected));
+  const handleFiles = useCallback((selectedFiles) => {
+    if (!selectedFiles || selectedFiles.length === 0) return;
+    const fileArray = Array.from(selectedFiles);
+    setFiles(fileArray);
+
+    const newPreviews = fileArray.map((f) => URL.createObjectURL(f));
+    setPreviews(newPreviews);
     setResult(null);
   }, []);
 
-  const handleFileChange = (e) => handleFile(e.target.files[0]);
+  const handleFileChange = (e) => handleFiles(e.target.files);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -144,27 +175,27 @@ function Home() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files?.length > 0) handleFiles(e.dataTransfer.files);
   };
 
-  const clearFile = () => {
-    setFile(null);
-    setPreview(null);
+  const clearFiles = () => {
+    setFiles([]);
+    setPreviews([]);
     setResult(null);
     if (inputRef.current) inputRef.current.value = "";
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
     setLoading(true);
     setResult(null);
 
     const formData = new FormData();
-    formData.append("file", file);
+    files.forEach((file) => formData.append("files", file));
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/predict", {
+      const response = await fetch("http://127.0.0.1:8000/batch_predict", {
         method: "POST",
         body: formData,
       });
@@ -177,8 +208,6 @@ function Home() {
     }
   };
 
-  const hasDetections = result && result.num_detections > 0;
-
   return (
     <div className="home-content">
       {/* Hero */}
@@ -187,8 +216,8 @@ function Home() {
           AI-Powered Chest X-Ray<br />Abnormality Detection
         </h2>
         <p className="hero-desc">
-          Upload a chest X-ray and detect up to 14 different abnormalities with bounding
-          box localization using our YOLO11 deep learning model.
+          Upload chest X-rays to detect up to 14 different abnormalities with bounding
+          box localization using our YOLO11 deep learning model. Switch to batch upload to predict multiple fast.
         </p>
         <div className="hero-stats">
           <div className="stat-pill">
@@ -210,12 +239,12 @@ function Home() {
       <section className="card upload-card">
         <div className="card-header">
           <FileImage size={18} />
-          <span>Upload X-Ray Image</span>
+          <span>Upload X-Ray Images</span>
         </div>
 
         <form onSubmit={handleSubmit}>
           <label
-            className={`dropzone ${dragActive ? "dropzone-active" : ""} ${preview ? "dropzone-has-file" : ""}`}
+            className={`dropzone ${dragActive ? "dropzone-active" : ""} ${previews.length > 0 ? "dropzone-has-file" : ""}`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
@@ -225,42 +254,61 @@ function Home() {
               ref={inputRef}
               type="file"
               accept="image/*"
+              multiple
               onChange={handleFileChange}
               hidden
             />
 
-            {!preview ? (
+            {!previews.length ? (
               <div className="dropzone-content">
                 <div className="dropzone-icon-wrap">
                   <Upload size={28} />
                 </div>
                 <p className="dropzone-primary">
-                  Click to upload or drag & drop
+                  Click to upload or drag & drop multiple files
                 </p>
                 <p className="dropzone-secondary">
-                  PNG, JPG, DICOM up to 10 MB
+                  PNG, JPG, DICOM up to 10 MB per file
                 </p>
               </div>
             ) : (
-              <div className="preview-wrap">
-                <img src={preview} alt="X-Ray Preview" className="preview-img" />
-                <div className="preview-overlay">
-                  <span className="preview-filename">{file.name}</span>
-                </div>
+              <div
+                className="preview-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: "12px",
+                  padding: "16px",
+                  width: "100%",
+                }}
+              >
+                {previews.map((preview, idx) => (
+                  <div key={idx} className="preview-wrap">
+                    <img
+                      src={preview}
+                      alt={`Preview ${idx}`}
+                      className="preview-img"
+                      style={{ maxHeight: "180px", width: "100%", objectFit: "cover" }}
+                    />
+                    <div className="preview-overlay" style={{ padding: "8px" }}>
+                      <span className="preview-filename">{files[idx].name}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </label>
 
           <div className="action-row">
-            {preview && (
-              <button type="button" className="btn btn-ghost" onClick={clearFile}>
-                <Trash2 size={16} /> Remove
+            {previews.length > 0 && (
+              <button type="button" className="btn btn-ghost" onClick={clearFiles}>
+                <Trash2 size={16} /> Remove All
               </button>
             )}
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={!file || loading}
+              disabled={files.length === 0 || loading}
             >
               {loading ? (
                 <>
@@ -280,84 +328,130 @@ function Home() {
       {loading && (
         <section className="card loading-card">
           <div className="pulse-ring" />
-          <p className="loading-title">Scanning X-ray for abnormalities</p>
+          <p className="loading-title">Scanning X-rays for abnormalities</p>
           <p className="loading-sub">
-            Running YOLO11 object detection...
+            Running YOLO11 object detection in batch mode...
           </p>
         </section>
       )}
 
       {/* Results */}
-      {result && (
-        <section className="card result-card fade-in">
-          <div className="card-header">
-            <Activity size={18} />
-            <span>Detection Results</span>
-            {result.inference_time_seconds && (
-              <span className="badge badge-sm">{result.inference_time_seconds}s</span>
-            )}
-          </div>
-
-          {/* Summary banner */}
-          <div className={`result-summary ${hasDetections ? "result-warning" : "result-ok"}`}>
-            {hasDetections ? (
-              <AlertCircle size={28} />
-            ) : (
-              <CheckCircle2 size={28} />
-            )}
-            <div>
-              <p className="summary-label">
-                {hasDetections ? "Abnormalities Detected" : "No Abnormalities Found"}
-              </p>
-              <p className="summary-text">{result.summary}</p>
+      {result && result.results && (
+        <div className="batch-results fade-in" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {result.results.length > 1 && (
+            <div
+              className="card-header"
+              style={{
+                marginBottom: 0,
+                justifyContent: "space-between",
+                display: "flex",
+              }}
+            >
+              <span>
+                <Activity
+                  size={18}
+                  style={{ display: "inline", marginRight: "8px", verticalAlign: "text-bottom" }}
+                />
+                Batch Prediction Results
+              </span>
+              <span className="badge badge-sm">
+                {result.total_images} images processed in {result.total_time_seconds}s
+              </span>
             </div>
-            {hasDetections && (
-              <span className="det-count">{result.num_detections}</span>
-            )}
-          </div>
+          )}
 
-          {/* Image with bounding boxes */}
-          {preview && hasDetections && (
-            <div className="detection-image-section">
-              <div className="det-image-header">
-                <span className="det-image-title">
-                  <Eye size={15} /> Localized Findings
-                </span>
-                <button
-                  className="btn btn-ghost btn-xs"
-                  onClick={() => setShowBoxes(!showBoxes)}
+          {result.results.map((itemResult, idx) => {
+            const hasDetections = itemResult.num_detections > 0;
+            const previewUrl = previews[idx];
+
+            return (
+              <section key={idx} className="card result-card">
+                <div className="card-header">
+                  <FileImage size={18} />
+                  <span>{itemResult.filename}</span>
+                  {itemResult.inference_time_seconds && (
+                    <span className="badge badge-sm">{itemResult.inference_time_seconds}s</span>
+                  )}
+                </div>
+
+                {/* Summary banner */}
+                <div
+                  className={`result-summary ${hasDetections ? "result-warning" : "result-ok"
+                    }`}
                 >
-                  {showBoxes ? "Hide Boxes" : "Show Boxes"}
-                </button>
-              </div>
-              <div className="det-image-wrap">
-                <img src={preview} alt="Detection result" className="det-result-img" />
-                {showBoxes && result.image_size && (
-                  <BBoxOverlay
-                    detections={result.detections}
-                    imgWidth={result.image_size.width}
-                    imgHeight={result.image_size.height}
-                  />
+                  {hasDetections ? (
+                    <AlertCircle size={28} />
+                  ) : (
+                    <CheckCircle2 size={28} />
+                  )}
+                  <div>
+                    <p className="summary-label">
+                      {hasDetections
+                        ? "Abnormalities Detected"
+                        : "No Abnormalities Found"}
+                    </p>
+                    <p className="summary-text">
+                      {hasDetections
+                        ? `${itemResult.detections[0].class_name} (${(
+                          itemResult.detections[0].confidence * 100
+                        ).toFixed(1)}% confidence)`
+                        : "No abnormalities detected"}
+                    </p>
+                  </div>
+                  {hasDetections && (
+                    <span className="det-count">{itemResult.num_detections}</span>
+                  )}
+                </div>
+
+                {/* Image with bounding boxes */}
+                {previewUrl && hasDetections && (
+                  <div className="detection-image-section">
+                    <div className="det-image-header">
+                      <span className="det-image-title">
+                        <Eye size={15} /> Localized Findings
+                      </span>
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => setShowBoxes(!showBoxes)}
+                      >
+                        {showBoxes ? "Hide Boxes" : "Show Boxes"}
+                      </button>
+                    </div>
+                    <div className="det-image-wrap">
+                      <img
+                        src={previewUrl}
+                        alt="Detection result"
+                        className="det-result-img"
+                      />
+                      {showBoxes && itemResult.image_size && (
+                        <BBoxOverlay
+                          detections={itemResult.detections}
+                          imgWidth={itemResult.image_size.width}
+                          imgHeight={itemResult.image_size.height}
+                        />
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
-            </div>
-          )}
 
-          {/* Detection list */}
-          {hasDetections && (
-            <div className="detections-list">
-              <p className="det-list-title">Detected Abnormalities</p>
-              {result.detections.map((det, i) => (
-                <DetectionCard key={i} det={det} index={i} />
-              ))}
-            </div>
-          )}
+                {/* Detection list */}
+                {hasDetections && (
+                  <div className="detections-list">
+                    <p className="det-list-title">Detected Abnormalities</p>
+                    {itemResult.detections.map((det, i) => (
+                      <DetectionCard key={i} det={det} index={i} />
+                    ))}
+                  </div>
+                )}
 
-          <p className="disclaimer">
-            This AI analysis is for research/educational purposes only and should not
-            replace professional medical diagnosis.
-          </p>
-        </section>
+                <p className="disclaimer" style={{ marginTop: "18px" }}>
+                  This AI analysis is for research/educational purposes only and should not
+                  replace professional medical diagnosis.
+                </p>
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );
